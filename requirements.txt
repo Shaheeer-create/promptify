@@ -1,5 +1,6 @@
 fastapi
 uvicorn
-supabase
-agents
-asyncio
+httpx
+openai
+python-dotenv
+python-decouple

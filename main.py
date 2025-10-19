@@ -1,28 +1,45 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
+from typing import AsyncGenerator
 from agents import Agent, Runner, SQLiteSession, set_tracing_disabled
 from my_configuration.configuration import model
 from openai.types.responses import ResponseTextDeltaEvent
 from my_supabase.supaabse import store_in_supabase
 import json
-import os
+import logging
 
 # =========================================================
-# REQUEST MODEL
+# LOGGING
+# =========================================================
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# =========================================================
+# REQUEST/RESPONSE MODELS
 # =========================================================
 class PromptRequest(BaseModel):
-    user_input: str
-    user_id: str
+    user_input: str = Field(..., min_length=1, max_length=5000)
+    user_id: str = Field(..., min_length=1)
+
+class ErrorResponse(BaseModel):
+    error: str
+    detail: str = None
 
 # =========================================================
 # FASTAPI SETUP
 # =========================================================
-app = FastAPI(title="Promptify AI API")
+app = FastAPI(
+    title="Promptify AI API",
+    description="AI-powered prompt enhancement and optimization",
+    version="1.0.0"
+)
 
+# CORS Configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # You can restrict this to your frontend URL later
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -137,14 +154,22 @@ Return only:
 )
 
 # =========================================================
-# ROUTE: IMPROVE PROMPT
+# ROUTES
 # =========================================================
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint for deployment monitoring."""
+    return {"status": "healthy", "service": "Promptify AI API"}
+
 @app.post("/api/improve-stream")
 async def improve_prompt_stream(request: PromptRequest):
     """
     Improve a prompt with streaming response.
+    Returns NDJSON (newline-delimited JSON).
     """
-    async def generate():
+    
+    async def generate() -> AsyncGenerator[str, None]:
         try:
             session = SQLiteSession("prompt_stream.db")
             
@@ -155,25 +180,84 @@ async def improve_prompt_stream(request: PromptRequest):
             )
             
             full_output = ""
+            
             async for event in result.stream_events():
                 if event.type == "raw_response_event" and isinstance(event.data, ResponseTextDeltaEvent):
                     delta = event.data.delta
                     full_output += delta
-                    # Stream as JSON lines
                     yield json.dumps({"chunk": delta}) + "\n"
             
             # Store in Supabase after streaming completes
-            store_in_supabase(request.user_id, request.user_input, full_output.strip())
+            try:
+                store_in_supabase(request.user_id, request.user_input, full_output.strip())
+            except Exception as e:
+                logger.error(f"Supabase storage error: {str(e)}")
             
-            # Send completion signal
+            # Send completion signal with full output
             yield json.dumps({"status": "complete", "full_output": full_output.strip()}) + "\n"
             
         except Exception as e:
-            yield json.dumps({"error": str(e)}) + "\n"
-
+            logger.error(f"Stream error: {str(e)}")
+            yield json.dumps({"error": "stream_failed", "detail": str(e)}) + "\n"
+    
     return StreamingResponse(generate(), media_type="application/x-ndjson")
 
+@app.post("/api/improve")
+async def improve_prompt(request: PromptRequest):
+    """
+    Non-streaming endpoint for prompt improvement.
+    Useful for clients that don't support streaming.
+    """
+    try:
+        session = SQLiteSession("prompt_stream.db")
+        
+        result = Runner.run(
+            Ultimate_Prompt_Refiner,
+            input=request.user_input,
+            session=session
+        )
+        
+        # Store in Supabase
+        try:
+            store_in_supabase(request.user_id, request.user_input, str(result))
+        except Exception as e:
+            logger.error(f"Supabase storage error: {str(e)}")
+        
+        return {"improved_prompt": result}
+        
+    except Exception as e:
+        logger.error(f"Prompt improvement error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/")
+async def root():
+    """Welcome endpoint."""
+    return {
+        "message": "Welcome to Promptify AI API",
+        "endpoints": {
+            "health": "/health",
+            "streaming": "/api/improve-stream",
+            "non-streaming": "/api/improve",
+            "docs": "/docs"
+        }
+    }
+
+# =========================================================
+# ERROR HANDLERS
+# =========================================================
+@app.exception_handler(ValueError)
+async def value_error_handler(request, exc):
+    return HTTPException(status_code=400, detail=str(exc))
+
+# =========================================================
+# MAIN
+# =========================================================
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
-
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=False,
+        log_level="info"
+    )

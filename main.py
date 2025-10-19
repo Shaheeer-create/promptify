@@ -5,8 +5,8 @@ from agents import Agent, Runner, SQLiteSession, set_tracing_disabled
 from my_configuration.configuration import model
 from openai.types.responses import ResponseTextDeltaEvent
 from my_supabase.supaabse import store_in_supabase
-import asyncio
 import json
+import os
 
 # =========================================================
 # REQUEST MODEL
@@ -142,7 +142,8 @@ Return only:
 @app.post("/api/improve")
 async def improve_prompt(request: PromptRequest):
     try:
-        session = SQLiteSession(request.user_id, "prompt_stream.db")
+        db_path = os.path.abspath("prompt_stream.db")
+        session = SQLiteSession(request.user_id, db_path)
 
         # Run agent pipeline
         combined_input = (

@@ -142,7 +142,7 @@ Return only:
 @app.post("/api/improve")
 async def improve_prompt(request: PromptRequest):
     try:
-        session = SQLiteSession(request.user_id, "promptify_sessions.db")
+        session = SQLiteSession(request.user_id, "prompt_stream.db")
 
         # Run agent pipeline
         combined_input = (

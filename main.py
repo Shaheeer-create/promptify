@@ -30,7 +30,7 @@ class PromptRequest(BaseModel):
     user_id: str = "user_default"
 
 
-async def initialize_agents():
+def initialize_agents():
     set_tracing_disabled(True)
 
     # =========================

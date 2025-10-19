@@ -142,7 +142,12 @@ Return only:
 @app.post("/api/improve")
 async def improve_prompt(request: PromptRequest):
     try:
-        db_path = os.path.abspath("prompt_stream.db")
+        # Ensure the database directory exists
+        db_dir = os.path.abspath(".")
+        db_path = os.path.join(db_dir, "prompt_stream.db")
+        if not os.path.exists(db_dir):
+            os.makedirs(db_dir)
+
         session = SQLiteSession(request.user_id, db_path)
 
         # Run agent pipeline

@@ -30,7 +30,7 @@ class PromptRequest(BaseModel):
     user_id: str = "user_default"
 
 
-async def initialize_agents():
+async def main():
     set_tracing_disabled(True)
 
     # =========================
@@ -185,137 +185,33 @@ Rules:
         tool_name="ultimate_prompt_refiner_tool",
         tool_description="Transforms vague prompts into either short or detailed professional prompts based on user choice."
     )
-    return Ultimate_Prompt_Refiner
 
-# Initialize agents
-responder_agent = initialize_agents()
+    # =========================
+    # Session + Streaming Loop
+    # =========================
+    session = SQLiteSession("user_123", "prompt_stream.db")
 
-# =========================================================
-# ROUTES
-# =========================================================
+    print("=== Promptify By-Team_SAS ===")
+    print("Type 'exit' to quit.\n")
 
-@app.get("/")
-async def root():
-    """Health check endpoint"""
-    return {
-        "status": "online",
-        "service": "Promptify API",
-        "version": "1.0.0",
-        "endpoints": {
-            "improve": "POST /api/improve",
-            "improve-stream": "POST /api/improve-stream",
-            "health": "GET /health"
-        }
-    }
+    while True:
+        user_input = input("You: ")
+        if user_input.lower() in ["exit", "quit"]:
+            print("Goodbye!")
+            break
 
-@app.get("/health")
-async def health_check():
-    """Health check endpoint"""
-    return {"status": "healthy"}
+        combined_input = f"User prompt: {user_input}\nAsk for context and preferred style, then refine using the appropriate short or detailed agent."
 
-@app.post("/api/improve")
-async def improve_prompt(request: PromptRequest):
-    """
-    Improve a prompt and return the full result.
-    """
-    try:
-        session = SQLiteSession("prompt_stream.db")
-        
-        result = Runner.run_streamed(
-            responder_agent,
-            input=request.user_input,
-            session=session
-        )
-        
+        print("\n✨ Improved Prompt:\n")
+        result = Runner.run_streamed(Ultimate_Prompt_Refiner, input=combined_input, session=session)
         full_output = ""
         async for event in result.stream_events():
             if event.type == "raw_response_event" and isinstance(event.data, ResponseTextDeltaEvent):
+                print(event.data.delta, end="", flush=True)
                 full_output += event.data.delta
 
-        improved_prompt = full_output.strip()
-        
-        # Store in Supabase
-        store_in_supabase(request.user_id, request.user_input, improved_prompt)
-        
-        return {
-            "status": "success",
-            "original_prompt": request.user_input,
-            "improved_prompt": improved_prompt,
-            "user_id": request.user_id
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/improve-stream")
-async def improve_prompt_stream(request: PromptRequest):
-    """
-    Improve a prompt with streaming response.
-    """
-    async def generate():
-        try:
-            session = SQLiteSession("prompt_stream.db")
-            
-            result = Runner.run_streamed(
-                responder_agent,
-                input=request.user_input,
-                session=session
-            )
-            
-            full_output = ""
-            async for event in result.stream_events():
-                if event.type == "raw_response_event" and isinstance(event.data, ResponseTextDeltaEvent):
-                    delta = event.data.delta
-                    full_output += delta
-                    # Stream as JSON lines
-                    yield json.dumps({"chunk": delta}) + "\n"
-            
-            # Store in Supabase after streaming completes
-            store_in_supabase(request.user_id, request.user_input, full_output.strip())
-            
-            # Send completion signal
-            yield json.dumps({"status": "complete", "full_output": full_output.strip()}) + "\n"
-            
-        except Exception as e:
-            yield json.dumps({"error": str(e)}) + "\n"
-
-    return StreamingResponse(generate(), media_type="application/x-ndjson")
+        print("\n")
+        store_in_supabase("user_123", combined_input, full_output.strip())
 
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
-
-
-
-
-
-
-
-#     # =========================
-#     # Session + Streaming Loop
-#     # =========================
-#     session = SQLiteSession("user_123", "prompt_stream.db")
-
-#     print("=== Promptify By-Team_SAS ===")
-#     print("Type 'exit' to quit.\n")
-
-#     while True:
-#         user_input = input("You: ")
-#         if user_input.lower() in ["exit", "quit"]:
-#             print("Goodbye!")
-#             break
-
-#         combined_input = f"User prompt: {user_input}\nAsk for context and preferred style, then refine using the appropriate short or detailed agent."
-
-#         print("\n✨ Improved Prompt:\n")
-#         result = Runner.run_streamed(Ultimate_Prompt_Refiner, input=combined_input, session=session)
-#         full_output = ""
-#         async for event in result.stream_events():
-#             if event.type == "raw_response_event" and isinstance(event.data, ResponseTextDeltaEvent):
-#                 print(event.data.delta, end="", flush=True)
-#                 full_output += event.data.delta
-
-#         print("\n")
-#         store_in_supabase("user_123", combined_input, full_output.strip())
-
-# if __name__ == "__main__":
-#     asyncio.run(main())
+    asyncio.run(main())

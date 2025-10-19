@@ -139,49 +139,41 @@ Return only:
 # =========================================================
 # ROUTE: IMPROVE PROMPT
 # =========================================================
-@app.post("/api/improve")
-async def improve_prompt(request: PromptRequest):
-    try:
-        # Ensure the database directory exists
-        db_dir = os.path.abspath(".")
-        db_path = os.path.join(db_dir, "prompt_stream.db")
-        if not os.path.exists(db_dir):
-            os.makedirs(db_dir)
-
-        session = SQLiteSession(request.user_id, db_path)
-
-        # Run agent pipeline
-        combined_input = (
-            f"User prompt: {request.user_input}\n"
-            f"Ask for context and preferred style, then refine accordingly."
-        )
-
-        result = Runner.run_streamed(Ultimate_Prompt_Refiner, input=combined_input, session=session)
-
-        full_output = ""
-        async for event in result.stream_events():
-            if event.type == "raw_response_event" and isinstance(event.data, ResponseTextDeltaEvent):
-                full_output += event.data.delta
-
-        # Extract JSON safely
+@app.post("/api/improve-stream")
+async def improve_prompt_stream(request: PromptRequest):
+    """
+    Improve a prompt with streaming response.
+    """
+    async def generate():
         try:
-            json_output = json.loads(full_output.strip())
-        except json.JSONDecodeError:
-            json_output = {"improved_prompt": full_output.strip()}
+            session = SQLiteSession("prompt_stream.db")
+            
+            result = Runner.run_streamed(
+                Ultimate_Prompt_Refiner,
+                input=request.user_input,
+                session=session
+            )
+            
+            full_output = ""
+            async for event in result.stream_events():
+                if event.type == "raw_response_event" and isinstance(event.data, ResponseTextDeltaEvent):
+                    delta = event.data.delta
+                    full_output += delta
+                    # Stream as JSON lines
+                    yield json.dumps({"chunk": delta}) + "\n"
+            
+            # Store in Supabase after streaming completes
+            store_in_supabase(request.user_id, request.user_input, full_output.strip())
+            
+            # Send completion signal
+            yield json.dumps({"status": "complete", "full_output": full_output.strip()}) + "\n"
+            
+        except Exception as e:
+            yield json.dumps({"error": str(e)}) + "\n"
 
-        # Save in Supabase
-        await store_in_supabase(
-            user_id=request.user_id,
-            user_message=request.user_input,
-            ai_message=json_output.get("improved_prompt", "N/A"),
-        )
+    return StreamingResponse(generate(), media_type="application/x-ndjson")
 
-        return json_output
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
 
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/")
-async def home():
-    return {"message": "Promptify AI API is running 🚀"}

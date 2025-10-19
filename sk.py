@@ -11,20 +11,13 @@ from my_supabase.supaabse import store_in_supabase
 
 
 
-app = FastAPI(title="Promptify API", version="1.0.0")
-
-# CORS Middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 # =========================================================
 # REQUEST MODEL
 # =========================================================
+
+class AgentOutput(BaseModel):
+    improved_prompt: str
+
 class PromptRequest(BaseModel):
     user_input: str
     user_id: str = "user_default"
@@ -115,6 +108,9 @@ You are ShortPromptSmith. Refine user prompt to be fully optimized, clear, struc
 4. Role
 5. Formatter
 6. Improver
+4. Return your final answer **as a plain text JSON-like object**, like this:
+   {"improved_prompt": "Final refined prompt text here"}
+5. Do not use Markdown formatting, code blocks, or commentary
 Output only the final short prompt.
 """,
         model=model,
@@ -125,7 +121,8 @@ Output only the final short prompt.
             Prompt_Role,
             Prompt_Formatter,
             Prompt_Improver
-        ]
+        ],
+
     ).as_tool(
         tool_name="short_prompt_refiner_tool",
         tool_description="Generates short, concise refined prompts."
@@ -144,6 +141,10 @@ You are DetailedPromptSmith. Refine user prompt to be fully optimized, clear, st
 4. Role
 5. Formatter
 6. Improver
+
+4. Return your final answer **as a plain text JSON-like object**, like this:
+   {"improved_prompt": "Final refined prompt text here"}
+5. Do not use Markdown formatting, code blocks, or commentary
 Output only the final detailed prompt with practical examples.
 """,
         model=model,
@@ -154,7 +155,8 @@ Output only the final detailed prompt with practical examples.
             Prompt_Role,
             Prompt_Formatter,
             Prompt_Improver
-        ]
+        ],
+
     ).as_tool(
         tool_name="detailed_prompt_refiner_tool",
         tool_description="Generates long, detailed refined prompts."
@@ -163,23 +165,33 @@ Output only the final detailed prompt with practical examples.
     # =========================
     # Ultimate Prompt Refiner Agent
     # =========================
+# =========================
+# Ultimate Prompt Refiner Agent (Improved)
+# =========================
     Ultimate_Prompt_Refiner = Agent(
-        name="Ultimate Prompt Refiner",
-        instructions="""
-You are PromptSmith Pro. Take a vague or incomplete user prompt and rewrite it into a fully optimized prompt.
-Rules:
-1. Ask the user for:
-   a. Main context/background
-   b. Preferred output style: short or long
-2. Call either ShortPromptRefiner or DetailedPromptRefiner according to user choice.
-3. Output only the final refined prompt.
+    name="Ultimate Prompt Refiner",
+    instructions="""
+You are PromptSmith Pro, an expert at transforming vague or incomplete user prompts into powerful, professional, and well-structured ones.
+
+Interaction rules:
+1. Politely ask the user once for:
+   - The main context or background (if any)
+   - The preferred output style (choose between "short" or "detailed")
+2. If the user says they have no specific context, continue without re-asking.
+3. Based on the user's chosen style:
+   - Use `ShortPromptRefiner` for short outputs (≤40 words)
+   - Use `DetailedPromptRefiner` for detailed outputs (≤100 words)
+4. Return your final answer **as a plain text JSON-like object**, like this:
+   {"improved_prompt": "Final refined prompt text here"}
+5. Do not use Markdown formatting, code blocks, or commentary.
 """,
-        model=model,
-        tools=[
-            ShortPromptRefiner,
-            DetailedPromptRefiner
-        ]
-    )
+    model=model,
+    tools=[
+        ShortPromptRefiner,
+        DetailedPromptRefiner
+    ],
+)
+
 
     Ultimate_Prompt_Refiner_as_tool = Ultimate_Prompt_Refiner.as_tool(
         tool_name="ultimate_prompt_refiner_tool",

@@ -1,6 +1,6 @@
-fastapi
-uvicorn
-pydantic
-agents
+fastapi[standard]
+uvicorn[standard]
+httpx
 openai
-supabase
+python-dotenv
+python-decouple

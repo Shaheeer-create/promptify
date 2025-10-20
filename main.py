@@ -7,6 +7,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
+from ogcode import Ultimate_Prompt_Refiner
 
 # =========================================================
 # 📋 Logging Setup (Vercel / Production Friendly)
@@ -154,7 +155,7 @@ async def enhance_text(request: PromptRequest):
 
     try:
         session = SQLiteSession(request.user_id)
-        runner = await Runner.run(Ultimate_Prompt_Refiner, session, request.prompt)
+        runner = await Runner.run(session, request.prompt)
         improved_prompt = runner.final_output.strip()
 
         # Store result (non-blocking)

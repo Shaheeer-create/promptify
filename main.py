@@ -232,14 +232,19 @@ async def improve_image_prompt(request: PromptRequest):
 
         session = SQLiteSession(request.user_id, str(db_path))
 
-        # Synchronous run
-        result = Runner.run_sync(
+        # Run PortraitPrompt_Enhancer as a streamed agent
+        result = Runner.run_streamed(
             PortraitPrompt_Enhancer,
             input=request.user_input,
             session=session
         )
 
-        final_prompt = result.final_output.strip()
+        full_output = ""
+        async for event in result.stream_events():
+            if event.type == "raw_response_event" and hasattr(event.data, "delta"):
+                full_output += event.data.delta
+
+        final_prompt = full_output.strip()
 
         # Store in Supabase
         store_in_supabase(request.user_id, request.user_input, final_prompt)

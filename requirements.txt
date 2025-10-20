@@ -1,6 +1,6 @@
 fastapi
 httpx
 openai-agents
-python-doten>
-python-decoupl>
+python-dotenv
+python-decoupl
 supabase

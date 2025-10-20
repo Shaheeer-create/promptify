@@ -222,42 +222,6 @@ async def improve_prompt_detailed(request: PromptRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {str(e)}")
 
-
-@app.post("/api/improve-image", response_model=AgentOutput)
-async def improve_image_prompt(request: PromptRequest):
-    try:
-        TMP_DIR = Path("/tmp/promptify_db")
-        TMP_DIR.mkdir(parents=True, exist_ok=True)
-        db_path = TMP_DIR / f"{request.user_id}_portrait_prompt.db"
-
-        session = SQLiteSession(request.user_id, str(db_path))
-
-        # Run PortraitPrompt_Enhancer as a streamed agent
-        result = Runner.run_streamed(
-            PortraitPrompt_Enhancer,
-            input=request.user_input,
-            session=session
-        )
-
-        full_output = ""
-        async for event in result.stream_events():
-            if event.type == "raw_response_event" and hasattr(event.data, "delta"):
-                full_output += event.data.delta
-
-        final_prompt = full_output.strip()
-
-        # Store in Supabase
-        store_in_supabase(request.user_id, request.user_input, final_prompt)
-
-        return {"improved_prompt": final_prompt}
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {str(e)}")
-
-
-
-
-
 # =========================================================
 # ROOT ENDPOINT
 # =========================================================

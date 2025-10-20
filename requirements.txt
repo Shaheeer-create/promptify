@@ -1,6 +1,6 @@
 fastapi
-uvicorn
 httpx
-openai
-python-dotenv
-python-decouple
+openai-agents
+python-doten>
+python-decoupl>
+supabase

@@ -1,49 +1,90 @@
 import logging
+import os
+import sys
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
-import uvicorn
-from agents import Runner, SQLiteSession
-from my_supabase.supaabse import store_in_supabase
-from image_agents import PortraitPrompt_Enhancer
-from ogcode import Ultimate_Prompt_Refiner
+import traceback
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+# =========================================================
+# 📋 Logging Setup (Vercel-friendly)
+# =========================================================
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    stream=sys.stdout
+)
 logger = logging.getLogger(__name__)
 
+logger.info("🚀 Starting FastAPI application...")
+
 # =========================================================
-# 🚀 Import your agents (with error handling)
+# 🚀 Safe Import with Fallbacks
 # =========================================================
 
+Runner = None
+SQLiteSession = None
+store_in_supabase = None
+Ultimate_Prompt_Refiner = None
+PortraitPrompt_Enhancer = None
+
 try:
+    logger.info("Attempting to import agents...")
     from agents import Runner, SQLiteSession
-    from my_supabase.supaabse import store_in_supabase
-    from image_agents import PortraitPrompt_Enhancer
-    from ogcode import Ultimate_Prompt_Refiner
+    logger.info("✅ Imported agents.Runner and SQLiteSession")
 except ImportError as e:
-    logger.warning(f"Import warning: {e}. Using mock implementations for development.")
-    # Mock implementations for development/testing
+    logger.error(f"⚠️ Failed to import agents: {e}")
+    
+    class SQLiteSession:
+        def __init__(self, user_id):
+            self.user_id = user_id
+            logger.info(f"Mock SQLiteSession created for user: {user_id}")
+
+try:
+    logger.info("Attempting to import Supabase...")
+    from my_supabase.supaabse import store_in_supabase
+    logger.info("✅ Imported store_in_supabase")
+except ImportError as e:
+    logger.error(f"⚠️ Failed to import Supabase: {e}")
+    
+    def store_in_supabase(user_id, prompt, improved_prompt):
+        logger.info(f"Mock: Stored prompt for user {user_id}")
+
+try:
+    logger.info("Attempting to import image agents...")
+    from image_agents import PortraitPrompt_Enhancer
+    logger.info("✅ Imported PortraitPrompt_Enhancer")
+except ImportError as e:
+    logger.error(f"⚠️ Failed to import PortraitPrompt_Enhancer: {e}")
+    
+    class PortraitPrompt_Enhancer:
+        pass
+
+try:
+    logger.info("Attempting to import prompt refiner...")
+    from ogcode import Ultimate_Prompt_Refiner
+    logger.info("✅ Imported Ultimate_Prompt_Refiner")
+except ImportError as e:
+    logger.error(f"⚠️ Failed to import Ultimate_Prompt_Refiner: {e}")
+    
+    class Ultimate_Prompt_Refiner:
+        pass
+
+# =========================================================
+# Mock Runner if not imported
+# =========================================================
+
+if Runner is None:
+    logger.warning("⚠️ Using mock Runner implementation")
     class Runner:
         @staticmethod
         async def run(starting_agent, session, input):
             class MockOutput:
                 final_output = f"Enhanced: {input}"
             return MockOutput()
-    
-    class SQLiteSession:
-        def __init__(self, user_id):
-            self.user_id = user_id
-    
-    def store_in_supabase(user_id, prompt, improved_prompt):
-        logger.info(f"Mock: Stored prompt for user {user_id}")
-    
-    class Ultimate_Prompt_Refiner:
-        pass
-    
-    class PortraitPrompt_Enhancer:
-        pass
 
 # =========================================================
 # 🧩 Request/Response Models
@@ -52,14 +93,6 @@ except ImportError as e:
 class PromptRequest(BaseModel):
     user_id: str = Field(..., description="Unique user identifier")
     prompt: str = Field(..., description="The prompt to enhance", min_length=1, max_length=5000)
-    
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "user_id": "user_123",
-                "prompt": "A girl with blue eyes"
-            }
-        }
 
 class PromptResponse(BaseModel):
     status: str
@@ -69,6 +102,7 @@ class PromptResponse(BaseModel):
 class HealthResponse(BaseModel):
     status: str
     version: str
+    environment: str
 
 # =========================================================
 # 📋 Lifespan Events
@@ -76,31 +110,36 @@ class HealthResponse(BaseModel):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
-    logger.info("🚀 AI Prompt Enhancement API starting...")
+    logger.info("✅ API Startup - All systems ready")
     yield
-    # Shutdown
-    logger.info("🛑 API shutting down...")
+    logger.info("🛑 API Shutdown")
 
 # =========================================================
 # 🚀 FastAPI App Setup
 # =========================================================
 
+logger.info("🔧 Initializing FastAPI app...")
+
 app = FastAPI(
     title="AI Prompt Enhancement API",
-    description="FastAPI service for refining text and image prompts using multi-agent systems.",
+    description="FastAPI service for refining text and image prompts",
     version="1.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json"
 )
 
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+logger.info("✅ FastAPI app initialized successfully")
 
 # =========================================================
 # 🏠 Health Check Endpoint
@@ -108,24 +147,31 @@ app.add_middleware(
 
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
-    """Health check endpoint for monitoring and deployment."""
-    return {"status": "healthy", "version": "1.0.0"}
+    """Health check endpoint for Vercel monitoring."""
+    env = os.getenv("VERCEL_ENV", "development")
+    logger.info(f"Health check requested - Environment: {env}")
+    return {
+        "status": "healthy",
+        "version": "1.0.0",
+        "environment": env
+    }
 
 # =========================================================
 # 🏠 Root Route
 # =========================================================
 
-@app.get("/", response_model=dict)
+@app.get("/")
 async def root():
-    """Welcome endpoint with API documentation."""
+    """Welcome endpoint."""
+    logger.info("Root endpoint accessed")
     return {
-        "message": "Welcome to the AI Prompt Enhancement API 🚀",
+        "message": "✅ AI Prompt Enhancement API is running",
         "version": "1.0.0",
         "docs": "/docs",
+        "health": "/health",
         "endpoints": {
-            "GET /health": "Health check endpoint",
-            "POST /enhance-text": "Refine any text or general prompt",
-            "POST /enhance-image": "Enhance portrait/image generation prompts"
+            "POST /enhance-text": "Refine text prompts",
+            "POST /enhance-image": "Enhance image prompts"
         }
     }
 
@@ -135,35 +181,35 @@ async def root():
 
 @app.post("/enhance-text", response_model=PromptResponse)
 async def enhance_text(request: PromptRequest):
-    """
-    Enhance and refine text prompts using the Ultimate Prompt Refiner agent.
+    """Enhance text prompts."""
+    request_id = id(request)
+    logger.info(f"[{request_id}] Text enhancement started - User: {request.user_id}")
     
-    Args:
-        request: PromptRequest containing user_id and prompt
-        
-    Returns:
-        PromptResponse with enhanced prompt
-    """
     try:
-        logger.info(f"Processing text enhancement for user: {request.user_id}")
-        
+        # Create session
+        logger.info(f"[{request_id}] Creating SQLiteSession...")
         session = SQLiteSession(request.user_id)
+        
+        # Run agent
+        logger.info(f"[{request_id}] Running Ultimate_Prompt_Refiner agent...")
         runner = await Runner.run(
             starting_agent=Ultimate_Prompt_Refiner,
             session=session,
             input=request.prompt
         )
-
+        
         improved_prompt = runner.final_output.strip()
+        logger.info(f"[{request_id}] Agent completed successfully")
         
-        # Store in Supabase
+        # Store in Supabase (non-blocking)
         try:
+            logger.info(f"[{request_id}] Storing in Supabase...")
             store_in_supabase(request.user_id, request.prompt, improved_prompt)
+            logger.info(f"[{request_id}] Supabase storage successful")
         except Exception as e:
-            logger.error(f"Supabase storage failed: {e}")
-            # Don't fail the request, just log the error
+            logger.warning(f"[{request_id}] Supabase storage failed (non-critical): {e}")
         
-        logger.info(f"✅ Text enhancement completed for user: {request.user_id}")
+        logger.info(f"[{request_id}] ✅ Text enhancement completed")
         return PromptResponse(
             status="success",
             type="text",
@@ -171,10 +217,11 @@ async def enhance_text(request: PromptRequest):
         )
 
     except Exception as e:
-        logger.error(f"❌ Text enhancement error for user {request.user_id}: {str(e)}", exc_info=True)
+        logger.error(f"[{request_id}] ❌ Text enhancement failed: {str(e)}")
+        logger.error(f"[{request_id}] Traceback: {traceback.format_exc()}")
         raise HTTPException(
             status_code=500,
-            detail=f"Error processing text prompt: {str(e)}"
+            detail=f"Text enhancement failed: {str(e)}"
         )
 
 # =========================================================
@@ -183,35 +230,35 @@ async def enhance_text(request: PromptRequest):
 
 @app.post("/enhance-image", response_model=PromptResponse)
 async def enhance_image(request: PromptRequest):
-    """
-    Enhance image/portrait generation prompts using the Portrait Prompt Enhancer agent.
+    """Enhance image prompts."""
+    request_id = id(request)
+    logger.info(f"[{request_id}] Image enhancement started - User: {request.user_id}")
     
-    Args:
-        request: PromptRequest containing user_id and prompt
-        
-    Returns:
-        PromptResponse with enhanced prompt
-    """
     try:
-        logger.info(f"Processing image enhancement for user: {request.user_id}")
-        
+        # Create session
+        logger.info(f"[{request_id}] Creating SQLiteSession...")
         session = SQLiteSession(request.user_id)
+        
+        # Run agent
+        logger.info(f"[{request_id}] Running PortraitPrompt_Enhancer agent...")
         runner = await Runner.run(
             starting_agent=PortraitPrompt_Enhancer,
             session=session,
             input=request.prompt
         )
-
+        
         improved_prompt = runner.final_output.strip()
+        logger.info(f"[{request_id}] Agent completed successfully")
         
-        # Store in Supabase
+        # Store in Supabase (non-blocking)
         try:
+            logger.info(f"[{request_id}] Storing in Supabase...")
             store_in_supabase(request.user_id, request.prompt, improved_prompt)
+            logger.info(f"[{request_id}] Supabase storage successful")
         except Exception as e:
-            logger.error(f"Supabase storage failed: {e}")
-            # Don't fail the request, just log the error
+            logger.warning(f"[{request_id}] Supabase storage failed (non-critical): {e}")
         
-        logger.info(f"✅ Image enhancement completed for user: {request.user_id}")
+        logger.info(f"[{request_id}] ✅ Image enhancement completed")
         return PromptResponse(
             status="success",
             type="image",
@@ -219,22 +266,27 @@ async def enhance_image(request: PromptRequest):
         )
 
     except Exception as e:
-        logger.error(f"❌ Image enhancement error for user {request.user_id}: {str(e)}", exc_info=True)
+        logger.error(f"[{request_id}] ❌ Image enhancement failed: {str(e)}")
+        logger.error(f"[{request_id}] Traceback: {traceback.format_exc()}")
         raise HTTPException(
             status_code=500,
-            detail=f"Error processing image prompt: {str(e)}"
+            detail=f"Image enhancement failed: {str(e)}"
         )
 
 # =========================================================
-# 🚀 Entry Point
+# 🔴 Global Exception Handler
 # =========================================================
 
-if __name__ == "__main__":
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=False,  # Set to True for development only
-        workers=4,
-        log_level="info"
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc):
+    logger.error(f"🔴 Unhandled exception: {str(exc)}")
+    logger.error(f"Traceback: {traceback.format_exc()}")
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": "Internal server error",
+            "error": str(exc)
+        }
     )
+
+logger.info("✅ Application fully initialized and ready")

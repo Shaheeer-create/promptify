@@ -127,7 +127,7 @@ DetailedPromptRefiner_as_tool = DetailedPromptRefiner.as_tool(tool_name="detaile
 Ultimate_Prompt_Refiner = Agent(
     name="Ultimate Refiner",
     instructions="""Refine any user prompt clearly and professionally.
-Ask once if they want "short" or "detailed" version. Default = short.
+"short" or "detailed" version. Default = short use detailed when user said that.
 If short → use short_refiner_tool. If detailed → use detailed_refiner_tool.
 Return JSON only: {"improved_prompt": "Refined prompt"}.""",
     model=model,

@@ -45,37 +45,43 @@ Prompt_Clarity = Agent(
     name="Prompt Clarity Enhancer",
     instructions="""You are ClarityMaster. Refine vague or confusing prompts into clear, specific, unambiguous statements. Keep intent intact. Output max 35 words. Only provide the refined prompt.""",
     model=model
-).as_tool("prompt_clarity_tool", "Refines vague prompts into clear, specific versions.")
+)
+Prompt_Clarity_as_tool=Prompt_Clarity.as_tool(tool_name="prompt_clarity_tool",tool_description= "Refines vague prompts into clear, specific versions.")
 
 Prompt_Context = Agent(
     name="Prompt Context Enricher",
     instructions="""You are ContextGuru. Enrich prompts with relevant background, examples, or scenario. Keep intent intact. Output max 40 words. Only provide the refined prompt.""",
     model=model
-).as_tool("prompt_context_tool", "Adds context/examples to prompts.")
+)
+Prompt_Context_as_tool=Prompt_Context.as_tool(tool_name="prompt_context_tool", tool_description="Adds context/examples to prompts.")
 
 Prompt_Instructions = Agent(
     name="Prompt Instruction Designer",
     instructions="""You are InstructionSmith. Add step-by-step guidance or structured tasks to prompts. Keep intent intact. Output max 40 words. Only provide the refined prompt.""",
     model=model
-).as_tool("prompt_instruction_tool", "Adds structured instructions to prompts.")
+)
+Prompt_Instructions_as_tool=Prompt_Instructions.as_tool(tool_name="prompt_instruction_tool",tool_description="Adds structured instructions to prompts.")
 
 Prompt_Role = Agent(
     name="Prompt Role Assigner",
     instructions="""You are RoleMaster. Add role, persona, or tone if needed. Keep intent intact. Output max 35 words. Only provide the refined prompt.""",
     model=model
-).as_tool("prompt_role_tool", "Adds role or tone to prompts.")
+)
+Prompt_Role_as_tool=Prompt_Role.as_tool(tool_name="prompt_role_tool",tool_description="Adds role or tone to prompts.")
 
 Prompt_Formatter = Agent(
     name="Prompt Output Formatter",
     instructions="""You are FormatGuru. Specify output format (bullet points, table, code, summary, etc.). Keep intent intact. Output max 40 words. Only provide the refined prompt.""",
     model=model
-).as_tool("prompt_formatter_tool", "Specifies output format for prompts.")
+)
+Prompt_Formatter_as_tool=Prompt_Formatter.as_tool(tool_name="prompt_formatter_tool",tool_description="Specifies output format for prompts.")
 
 Prompt_Improver = Agent(
     name="Prompt Improver",
     instructions="""You are PromptSmith. Polish prompts to make them concise, clear, and professional. Keep intent intact. Output max 40 words. Only provide the refined prompt.""",
     model=model
-).as_tool("prompt_improver_tool", "Polishes prompts for clarity and professionalism.")
+)
+Prompt_Improver_as_tool=Prompt_Improver.as_tool(tool_name="prompt_improver_tool",tool_description="Polishes prompts for clarity and professionalism.")
 
 
 # ---------- Short Prompt Refiner ----------
@@ -95,14 +101,15 @@ Do not use Markdown or commentary.
 """,
     model=model,
     tools=[
-        Prompt_Clarity,
-        Prompt_Context,
-        Prompt_Instructions,
-        Prompt_Role,
-        Prompt_Formatter,
-        Prompt_Improver
+        Prompt_Clarity_as_tool,
+        Prompt_Context_as_tool,
+        Prompt_Instructions_as_tool,
+        Prompt_Role_as_tool,
+        Prompt_Formatter_as_tool,
+        Prompt_Improver_as_tool
     ],
-).as_tool("short_prompt_refiner_tool", "Generates short, concise refined prompts.")
+)
+ShortPromptRefiner_as_tool=ShortPromptRefiner.as_tool(tool_name="short_prompt_refiner_tool", tool_description="Generates short, concise refined prompts.")
 
 
 # ---------- Detailed Prompt Refiner ----------
@@ -122,14 +129,16 @@ No Markdown or commentary.
 """,
     model=model,
     tools=[
-        Prompt_Clarity,
-        Prompt_Context,
-        Prompt_Instructions,
-        Prompt_Role,
-        Prompt_Formatter,
-        Prompt_Improver
+        Prompt_Clarity_as_tool,
+        Prompt_Context_as_tool,
+        Prompt_Instructions_as_tool,
+        Prompt_Role_as_tool,
+        Prompt_Formatter_as_tool,
+        Prompt_Improver_as_tool
+
     ],
-).as_tool("detailed_prompt_refiner_tool", "Generates long, detailed refined prompts.")
+)
+DetailedPromptRefiner_as_tool=DetailedPromptRefiner.as_tool(tool_name="detailed_prompt_refiner_tool", tool_description="Generates long, detailed refined prompts.")
 
 
 # ---------- Ultimate Prompt Refiner ----------
@@ -150,35 +159,87 @@ Rules:
 No Markdown, greetings, or code fences.
 """,
     model=model,
-    tools=[ShortPromptRefiner, DetailedPromptRefiner],
+    tools=[ShortPromptRefiner_as_tool, DetailedPromptRefiner_as_tool],
 )
 
 
 
+
 # =========================================================
-# COMMON FUNCTION (to avoid repetition)
+# FASTAPI ENDPOINT
 # =========================================================
-async def run_prompt_refiner(agent: Agent, request: PromptRequest):
-    """Helper function to process prompt with given agent."""
+from pathlib import Path
+import os
+
+@app.post("/api/improve", response_model=AgentOutput)
+async def improve_prompt(request: PromptRequest):
+    try:
+        # =========================================================
+        # ✅ Use temporary writable directory for serverless environments
+        # =========================================================
+        TMP_DIR = Path("/tmp/promptify_db")
+        TMP_DIR.mkdir(parents=True, exist_ok=True)
+        db_path = TMP_DIR / f"{request.user_id}_promptify.db"
+
+        session = SQLiteSession(request.user_id, str(db_path))
+
+        # =========================================================
+        # Prepare user input for processing
+        # =========================================================
+        combined_input = (
+            f"User prompt: {request.user_input}\n"
+            "Ask for context and preferred style, then refine using the appropriate short or detailed agent."
+        )
+
+        # =========================================================
+        # Run the Ultimate Prompt Refiner agent
+        # =========================================================
+        result = Runner.run_streamed(Ultimate_Prompt_Refiner, input=combined_input, session=session)
+
+        full_output = ""
+        async for event in result.stream_events():
+            if event.type == "raw_response_event" and isinstance(event.data, ResponseTextDeltaEvent):
+                full_output += event.data.delta
+
+        # =========================================================
+        # Store the interaction in Supabase
+        # =========================================================
+        store_in_supabase(request.user_id, request.user_input, full_output.strip())
+
+        # =========================================================
+        # Parse JSON if valid, else return raw text
+        # =========================================================
+        try:
+            parsed = json.loads(full_output.strip())
+            return parsed
+        except json.JSONDecodeError:
+            return {"improved_prompt": full_output.strip()}
+
+    except Exception as e:
+        # Provide readable backend error message
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {str(e)}")
+
+
+@app.post("/api/improve-detailed", response_model=AgentOutput)
+async def improve_prompt_detailed(request: PromptRequest):
     try:
         TMP_DIR = Path("/tmp/promptify_db")
         TMP_DIR.mkdir(parents=True, exist_ok=True)
         db_path = TMP_DIR / f"{request.user_id}_promptify.db"
 
         session = SQLiteSession(request.user_id, str(db_path))
-        combined_input = f"User prompt: {request.user_input}"
 
-        result = Runner.run_streamed(agent, input=combined_input, session=session)
+        combined_input = f"User prompt: {request.user_input}\nRefine this prompt in a detailed, structured way."
+
+        result = Runner.run_streamed(DetailedPromptRefiner, input=combined_input, session=session)
+
         full_output = ""
-
         async for event in result.stream_events():
             if event.type == "raw_response_event" and isinstance(event.data, ResponseTextDeltaEvent):
                 full_output += event.data.delta
 
-        # Store in Supabase
         store_in_supabase(request.user_id, request.user_input, full_output.strip())
 
-        # Parse JSON output if valid
         try:
             parsed = json.loads(full_output.strip())
             return parsed
@@ -190,21 +251,8 @@ async def run_prompt_refiner(agent: Agent, request: PromptRequest):
 
 
 # =========================================================
-# ENDPOINTS
+# ROOT ENDPOINT
 # =========================================================
-
-@app.post("/api/improve", response_model=AgentOutput)
-async def improve_short_prompt(request: PromptRequest):
-    """Refines prompt into short version."""
-    return await run_prompt_refiner(ShortPromptRefiner, request)
-
-
-@app.post("/api/improve-detailed", response_model=AgentOutput)
-async def improve_detailed_prompt(request: PromptRequest):
-    """Refines prompt into detailed version."""
-    return await run_prompt_refiner(DetailedPromptRefiner, request)
-
-
 @app.get("/")
 def root():
-    return {"message": "Welcome to Promptify API! Use /api/improve for short or /api/improve-detailed for detailed prompts."}
+    return {"message": "Welcome to Promptify Ultimate API! Use POST /api/improve to refine prompts."}

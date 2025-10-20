@@ -9,7 +9,18 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 # =========================================================
-# 📦 Imports
+# 🧾 Logging Setup (before anything else)
+# =========================================================
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    stream=sys.stdout,
+)
+logger = logging.getLogger(__name__)
+logger.info("🚀 FastAPI AI Prompt Enhancement API starting...")
+
+# =========================================================
+# 📦 Imports (Real Agents)
 # =========================================================
 from agents import Runner, SQLiteSession
 from ogcode import Ultimate_Prompt_Refiner
@@ -17,12 +28,19 @@ from image_agents import PortraitPrompt_Enhancer
 from my_supabase.supaabse import store_in_supabase
 
 
+# =========================================================
+# 🌐 Lifespan
+# =========================================================
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("✅ Startup complete.")
     yield
     logger.info("🛑 Application shutdown.")
 
+
+# =========================================================
+# ⚙️ FastAPI App Setup
+# =========================================================
 app = FastAPI(
     title="AI Prompt Enhancement API",
     description="FastAPI service for refining text and image prompts",
@@ -33,18 +51,14 @@ app = FastAPI(
     openapi_url="/openapi.json",
 )
 
-# =====
-# ====================================================
-# 🧾 Logging Setup
-# =========================================================
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-    stream=sys.stdout,
+# Enable CORS for all origins
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
-logger = logging.getLogger(__name__)
-logger.info("🚀 FastAPI AI Prompt Enhancement API starting...")
-
 
 # =========================================================
 # 🧱 Models
@@ -64,27 +78,6 @@ class HealthResponse(BaseModel):
     status: str
     version: str
     environment: str
-
-
-# =========================================================
-# 🌐 Lifespan
-# =========================================================
-
-
-
-# =========================================================
-# 🚀 FastAPI Setup
-# =========================================================
-
-
-# Enable CORS for all origins
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 
 # =========================================================
@@ -113,7 +106,7 @@ async def root():
 
 
 # =========================================================
-# 🧠 Text Prompt Enhancer (real agent)
+# 🧠 Text Prompt Enhancer (Real Agent)
 # =========================================================
 @app.post("/enhance-text", response_model=PromptResponse)
 async def enhance_text(request: PromptRequest):
@@ -122,8 +115,6 @@ async def enhance_text(request: PromptRequest):
 
     try:
         session = SQLiteSession(request.user_id)
-
-        # ✅ Real Agent Usage
         runner = await Runner.run(Ultimate_Prompt_Refiner, session, request.prompt)
         improved_prompt = runner.final_output.strip()
 
@@ -141,7 +132,7 @@ async def enhance_text(request: PromptRequest):
 
 
 # =========================================================
-# 🎨 Image Prompt Enhancer (real agent)
+# 🎨 Image Prompt Enhancer (Real Agent)
 # =========================================================
 @app.post("/enhance-image", response_model=PromptResponse)
 async def enhance_image(request: PromptRequest):
@@ -150,8 +141,6 @@ async def enhance_image(request: PromptRequest):
 
     try:
         session = SQLiteSession(request.user_id)
-
-        # ✅ Real Image Agent Usage
         runner = await Runner.run(PortraitPrompt_Enhancer, session, request.prompt)
         improved_prompt = runner.final_output.strip()
 
@@ -180,8 +169,8 @@ async def global_exception_handler(request: Request, exc: Exception):
         content={"detail": "Internal server error", "error": str(exc)},
     )
 
-
 # =========================================================
-# 🏁 Local Run
+# 🚫 DO NOT ADD uvicorn.run() HERE
 # =========================================================
-
+# Vercel will automatically detect the `app` instance
+# and run it as a serverless function.

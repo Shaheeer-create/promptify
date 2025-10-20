@@ -1,57 +1,24 @@
-import logging
-import os
-import sys
-import traceback
-from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
+from agents import Runner, SQLiteSession, set_tracing_disabled
+from my_supabase.supaabse import store_in_supabase
+from my_configuration.configuration import model
 
-# =========================================================
-# 🧾 Logging Setup (before anything else)
-# =========================================================
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-    stream=sys.stdout,
-)
-logger = logging.getLogger(__name__)
-logger.info("🚀 FastAPI AI Prompt Enhancement API starting...")
-
-# =========================================================
-# 📦 Imports (Real Agents)
-# =========================================================
-from agents import Runner, SQLiteSession
+# Import your existing agents
 from ogcode import Ultimate_Prompt_Refiner
 from image_agents import PortraitPrompt_Enhancer
-from my_supabase.supaabse import store_in_supabase
 
-
-# =========================================================
-# 🌐 Lifespan
-# =========================================================
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    logger.info("✅ Startup complete.")
-    yield
-    logger.info("🛑 Application shutdown.")
-
-
-# =========================================================
-# ⚙️ FastAPI App Setup
-# =========================================================
+# ------------------------------
+# FASTAPI SETUP
+# ------------------------------
 app = FastAPI(
-    title="AI Prompt Enhancement API",
-    description="FastAPI service for refining text and image prompts",
-    version="1.0.0",
-    lifespan=lifespan,
-    docs_url="/docs",
-    redoc_url="/redoc",
-    openapi_url="/openapi.json",
+    title="Prompt Refinement API",
+    description="API for refining and enhancing prompts using specialized AI agents",
+    version="1.0.0"
 )
 
-# Enable CORS for all origins
+# Enable CORS for all origins (you can restrict later)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -60,117 +27,78 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# =========================================================
-# 🧱 Models
-# =========================================================
+# Disable tracing for production cleanliness
+set_tracing_disabled(True)
+
+# ------------------------------
+# MODELS
+# ------------------------------
 class PromptRequest(BaseModel):
-    user_id: str = Field(..., description="Unique user identifier")
-    prompt: str = Field(..., description="Prompt text to enhance", min_length=1, max_length=5000)
+    user_id: str
+    prompt: str
 
 
-class PromptResponse(BaseModel):
-    status: str
-    type: str
-    improved_prompt: str
+# ------------------------------
+# ENDPOINTS
+# ------------------------------
+
+@app.post("/refine-general")
+async def refine_general(data: PromptRequest):
+    """
+    Refine general prompts using the Ultimate_Prompt_Refiner.
+    """
+    try:
+        session = SQLiteSession(data.user_id)
+        runner = await Runner.run(
+            starting_agent=Ultimate_Prompt_Refiner,
+            session=session,
+            input=data.prompt
+        )
+
+        improved_prompt = runner.final_output.strip()
+
+        # Store in Supabase
+        try:
+            store_in_supabase(data.user_id, data.prompt, improved_prompt)
+        except Exception as e:
+            print("⚠️ Supabase error:", e)
+
+        return {"success": True, "improved_prompt": improved_prompt}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-class HealthResponse(BaseModel):
-    status: str
-    version: str
-    environment: str
+@app.post("/refine-portrait")
+async def refine_portrait(data: PromptRequest):
+    """
+    Enhance portrait photography prompts using PortraitPrompt_Enhancer.
+    """
+    try:
+        session = SQLiteSession(data.user_id)
+        runner = await Runner.run(
+            starting_agent=PortraitPrompt_Enhancer,
+            session=session,
+            input=data.prompt
+        )
+
+        improved_prompt = runner.final_output.strip()
+
+        # Store in Supabase
+        try:
+            store_in_supabase(data.user_id, data.prompt, improved_prompt)
+        except Exception as e:
+            print("⚠️ Supabase error:", e)
+
+        return {"success": True, "improved_prompt": improved_prompt}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-# =========================================================
-# 🩺 Health Check
-# =========================================================
-@app.get("/health", response_model=HealthResponse)
-async def health_check():
-    env = os.getenv("VERCEL_ENV", "development")
-    return {"status": "healthy", "version": "1.0.0", "environment": env}
-
-
-# =========================================================
-# 🏠 Root
-# =========================================================
+# ------------------------------
+# ROOT ENDPOINT
+# ------------------------------
 @app.get("/")
 async def root():
-    return {
-        "message": "✅ AI Prompt Enhancement API is running",
-        "version": "1.0.0",
-        "docs": "/docs",
-        "endpoints": {
-            "POST /enhance-text": "Refine text prompts",
-            "POST /enhance-image": "Enhance image prompts",
-        },
-    }
-
-
-# =========================================================
-# 🧠 Text Prompt Enhancer (Real Agent)
-# =========================================================
-@app.post("/enhance-text", response_model=PromptResponse)
-async def enhance_text(request: PromptRequest):
-    request_id = id(request)
-    logger.info(f"[{request_id}] Enhancing text for user: {request.user_id}")
-
-    try:
-        session = SQLiteSession(request.user_id)
-        runner = await Runner.run(Ultimate_Prompt_Refiner, session, request.prompt)
-        improved_prompt = runner.final_output.strip()
-
-        try:
-            store_in_supabase(request.user_id, request.prompt, improved_prompt)
-        except Exception as e:
-            logger.warning(f"⚠️ Supabase store failed (non-critical): {e}")
-
-        return PromptResponse(status="success", type="text", improved_prompt=improved_prompt)
-
-    except Exception as e:
-        logger.error(f"[{request_id}] Text enhancement failed: {e}")
-        logger.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Text enhancement failed: {e}")
-
-
-# =========================================================
-# 🎨 Image Prompt Enhancer (Real Agent)
-# =========================================================
-@app.post("/enhance-image", response_model=PromptResponse)
-async def enhance_image(request: PromptRequest):
-    request_id = id(request)
-    logger.info(f"[{request_id}] Enhancing image prompt for user: {request.user_id}")
-
-    try:
-        session = SQLiteSession(request.user_id)
-        runner = await Runner.run(PortraitPrompt_Enhancer, session, request.prompt)
-        improved_prompt = runner.final_output.strip()
-
-        try:
-            store_in_supabase(request.user_id, request.prompt, improved_prompt)
-        except Exception as e:
-            logger.warning(f"⚠️ Supabase store failed (non-critical): {e}")
-
-        return PromptResponse(status="success", type="image", improved_prompt=improved_prompt)
-
-    except Exception as e:
-        logger.error(f"[{request_id}] Image enhancement failed: {e}")
-        logger.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Image enhancement failed: {e}")
-
-
-# =========================================================
-# 🔴 Global Exception Handler
-# =========================================================
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    logger.error(f"🔴 Unhandled exception: {exc}")
-    logger.error(traceback.format_exc())
-    return JSONResponse(
-        status_code=500,
-        content={"detail": "Internal server error", "error": str(exc)},
-    )
-
-# =========================================================
-# 🚫 DO NOT ADD uvicorn.run() HERE
-# =========================================================
-# Vercel will automatically detect the `app` instance
-# and run it as a serverless function.
+    return {"message": "🚀 Prompt Refinement API is running successfully!"}

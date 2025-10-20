@@ -16,7 +16,25 @@ from ogcode import Ultimate_Prompt_Refiner
 from image_agents import PortraitPrompt_Enhancer
 from my_supabase.supaabse import store_in_supabase
 
-# =========================================================
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("✅ Startup complete.")
+    yield
+    logger.info("🛑 Application shutdown.")
+
+app = FastAPI(
+    title="AI Prompt Enhancement API",
+    description="FastAPI service for refining text and image prompts",
+    version="1.0.0",
+    lifespan=lifespan,
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json",
+)
+
+# =====
+# ====================================================
 # 🧾 Logging Setup
 # =========================================================
 logging.basicConfig(
@@ -51,25 +69,13 @@ class HealthResponse(BaseModel):
 # =========================================================
 # 🌐 Lifespan
 # =========================================================
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    logger.info("✅ Startup complete.")
-    yield
-    logger.info("🛑 Application shutdown.")
+
 
 
 # =========================================================
 # 🚀 FastAPI Setup
 # =========================================================
-app = FastAPI(
-    title="AI Prompt Enhancement API",
-    description="FastAPI service for refining text and image prompts",
-    version="1.0.0",
-    lifespan=lifespan,
-    docs_url="/docs",
-    redoc_url="/redoc",
-    openapi_url="/openapi.json",
-)
+
 
 # Enable CORS for all origins
 app.add_middleware(
@@ -178,7 +184,4 @@ async def global_exception_handler(request: Request, exc: Exception):
 # =========================================================
 # 🏁 Local Run
 # =========================================================
-if __name__ == "__main__":
-    import uvicorn
-    port = int(os.getenv("PORT", 8000))
-    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
+

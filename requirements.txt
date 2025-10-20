@@ -1,7 +1,16 @@
-fastapi[standard]>=0.119.0
+# --- Core Framework ---
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+
+# --- OpenAI Agents SDK ---
 openai-agents>=0.4.0
-uvicorn[standard]>=0.24.0
+
+# --- Environment Variables ---
+python-dotenv>=1.0.1
 python-decouple>=3.8
-python-dotenv>=1.1.1
-supabase>=2.22.0
-pydantic>=2.5.0
+
+# --- Database / ORM ---
+supabase>=2.5.0
+
+# --- Data Validation ---
+pydantic>=2.6.0

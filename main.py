@@ -164,22 +164,14 @@ import os
 
 @app.post("/api/improve", response_model=AgentOutput)
 async def improve_prompt(request: PromptRequest):
-    """
-    Accepts user_input and user_id, processes via Ultimate Prompt Refiner,
-    stores conversation in Supabase, and returns improved prompt.
-    """
     try:
         # =========================================================
-        # ✅ Ensure a safe database directory path
+        # ✅ Use temporary writable directory for serverless environments
         # =========================================================
-        BASE_DIR = Path(__file__).resolve().parent
-        DB_DIR = BASE_DIR / "db"
-        DB_DIR.mkdir(exist_ok=True)  # Create directory if it doesn’t exist
+        TMP_DIR = Path("/tmp/promptify_db")
+        TMP_DIR.mkdir(parents=True, exist_ok=True)
+        db_path = TMP_DIR / f"{request.user_id}_promptify.db"
 
-        # Unique file per user to prevent locking issues
-        db_path = DB_DIR / f"{request.user_id}_promptify.db"
-
-        # Initialize SQLite session using absolute path
         session = SQLiteSession(request.user_id, str(db_path))
 
         # =========================================================

@@ -7,7 +7,7 @@ from agents import Agent, Runner, SQLiteSession, set_tracing_disabled
 from my_configuration.configuration import model
 from my_supabase.supaabse import store_in_supabase
 from openai.types.responses import ResponseTextDeltaEvent
-
+from pathlib import Path
 
 # =========================================================
 # FASTAPI SETUP
@@ -154,9 +154,14 @@ No Markdown, greetings, or code fences.
 )
 
 
+
+
 # =========================================================
 # FASTAPI ENDPOINT
 # =========================================================
+from pathlib import Path
+import os
+
 @app.post("/api/improve", response_model=AgentOutput)
 async def improve_prompt(request: PromptRequest):
     """
@@ -164,9 +169,30 @@ async def improve_prompt(request: PromptRequest):
     stores conversation in Supabase, and returns improved prompt.
     """
     try:
-        session = SQLiteSession(request.user_id, "promptify_session.db")
-        combined_input = f"User prompt: {request.user_input}\nAsk for context and preferred style, then refine using the appropriate short or detailed agent."
+        # =========================================================
+        # ✅ Ensure a safe database directory path
+        # =========================================================
+        BASE_DIR = Path(__file__).resolve().parent
+        DB_DIR = BASE_DIR / "db"
+        DB_DIR.mkdir(exist_ok=True)  # Create directory if it doesn’t exist
 
+        # Unique file per user to prevent locking issues
+        db_path = DB_DIR / f"{request.user_id}_promptify.db"
+
+        # Initialize SQLite session using absolute path
+        session = SQLiteSession(request.user_id, str(db_path))
+
+        # =========================================================
+        # Prepare user input for processing
+        # =========================================================
+        combined_input = (
+            f"User prompt: {request.user_input}\n"
+            "Ask for context and preferred style, then refine using the appropriate short or detailed agent."
+        )
+
+        # =========================================================
+        # Run the Ultimate Prompt Refiner agent
+        # =========================================================
         result = Runner.run_streamed(Ultimate_Prompt_Refiner, input=combined_input, session=session)
 
         full_output = ""
@@ -174,10 +200,14 @@ async def improve_prompt(request: PromptRequest):
             if event.type == "raw_response_event" and isinstance(event.data, ResponseTextDeltaEvent):
                 full_output += event.data.delta
 
-        # Store conversation in Supabase
+        # =========================================================
+        # Store the interaction in Supabase
+        # =========================================================
         store_in_supabase(request.user_id, request.user_input, full_output.strip())
 
-        # Clean output JSON
+        # =========================================================
+        # Parse JSON if valid, else return raw text
+        # =========================================================
         try:
             parsed = json.loads(full_output.strip())
             return parsed
@@ -185,7 +215,9 @@ async def improve_prompt(request: PromptRequest):
             return {"improved_prompt": full_output.strip()}
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        # Provide readable backend error message
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {str(e)}")
+
 
 
 # =========================================================

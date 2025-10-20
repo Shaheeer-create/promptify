@@ -8,7 +8,6 @@ from my_configuration.configuration import model
 from my_supabase.supaabse import store_in_supabase
 from openai.types.responses import ResponseTextDeltaEvent
 from pathlib import Path
-from image_agents import PortraitPrompt_Enhancer
 
 # =========================================================
 # FASTAPI SETUP
@@ -221,6 +220,7 @@ async def improve_prompt_detailed(request: PromptRequest):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {str(e)}")
+
 
 # =========================================================
 # ROOT ENDPOINT

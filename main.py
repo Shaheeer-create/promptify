@@ -29,6 +29,7 @@ app.add_middleware(
 class PromptRequest(BaseModel):
     user_input: str
     user_id: str = "user_default"
+    mode: str = "short"  # "short" or "detailed"
 
 
 class AgentOutput(BaseModel):
@@ -159,14 +160,18 @@ No Markdown, greetings, or code fences.
 # =========================================================
 # FASTAPI ENDPOINT
 # =========================================================
-from pathlib import Path
-import os
+
 
 @app.post("/api/improve", response_model=AgentOutput)
 async def improve_prompt(request: PromptRequest):
+    """
+    Accepts user_input, user_id, and optional mode ("short" or "detailed"),
+    processes the prompt via selected refiner, stores conversation in Supabase,
+    and returns the improved prompt.
+    """
     try:
         # =========================================================
-        # ✅ Use temporary writable directory for serverless environments
+        # ✅ Ensure a writable DB path for serverless (Vercel, AWS)
         # =========================================================
         TMP_DIR = Path("/tmp/promptify_db")
         TMP_DIR.mkdir(parents=True, exist_ok=True)
@@ -175,17 +180,20 @@ async def improve_prompt(request: PromptRequest):
         session = SQLiteSession(request.user_id, str(db_path))
 
         # =========================================================
-        # Prepare user input for processing
+        # Select Refiner Based on 'mode'
         # =========================================================
-        combined_input = (
-            f"User prompt: {request.user_input}\n"
-            "Ask for context and preferred style, then refine using the appropriate short or detailed agent."
-        )
+        mode = getattr(request, "mode", "short").lower()
+        if mode not in ["short", "detailed"]:
+            mode = "short"  # fallback default
+
+        selected_agent = ShortPromptRefiner if mode == "short" else DetailedPromptRefiner
+
+        combined_input = f"User prompt: {request.user_input}\nRefine this prompt in {mode} mode."
 
         # =========================================================
-        # Run the Ultimate Prompt Refiner agent
+        # Run Selected Refiner
         # =========================================================
-        result = Runner.run_streamed(Ultimate_Prompt_Refiner, input=combined_input, session=session)
+        result = Runner.run_streamed(selected_agent, input=combined_input, session=session)
 
         full_output = ""
         async for event in result.stream_events():
@@ -193,12 +201,12 @@ async def improve_prompt(request: PromptRequest):
                 full_output += event.data.delta
 
         # =========================================================
-        # Store the interaction in Supabase
+        # Store the result in Supabase
         # =========================================================
         store_in_supabase(request.user_id, request.user_input, full_output.strip())
 
         # =========================================================
-        # Parse JSON if valid, else return raw text
+        # Parse valid JSON output or return as text
         # =========================================================
         try:
             parsed = json.loads(full_output.strip())
@@ -207,7 +215,6 @@ async def improve_prompt(request: PromptRequest):
             return {"improved_prompt": full_output.strip()}
 
     except Exception as e:
-        # Provide readable backend error message
         raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {str(e)}")
 
 

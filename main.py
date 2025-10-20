@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from ogcode import Ultimate_Prompt_Refiner
+from agents import Runner, SQLiteSession
 
 # =========================================================
 # 📋 Logging Setup (Vercel / Production Friendly)
@@ -28,18 +29,6 @@ try:
     logger.info("✅ Imported: agents.Runner, agents.SQLiteSession")
 except Exception as e:
     logger.warning(f"⚠️ Failed to import agents: {e}")
-
-    class SQLiteSession:
-        def __init__(self, user_id):
-            self.user_id = user_id
-            logger.info(f"Mock SQLiteSession created for user: {user_id}")
-
-    class Runner:
-        @staticmethod
-        async def run(starting_agent, session, input):
-            class MockOutput:
-                final_output = f"Enhanced (mock): {input}"
-            return MockOutput()
 
 try:
     from my_supabase.supaabse import store_in_supabase
@@ -155,7 +144,7 @@ async def enhance_text(request: PromptRequest):
 
     try:
         session = SQLiteSession(request.user_id)
-        runner = await Runner.run(session, request.prompt)
+        runner = await Runner.run(Ultimate_Prompt_Refiner, session, request.prompt)
         improved_prompt = runner.final_output.strip()
 
         # Store result (non-blocking)

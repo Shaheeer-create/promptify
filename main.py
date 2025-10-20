@@ -9,41 +9,12 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 # =========================================================
-# 📦 Core Imports
+# 📦 Imports
 # =========================================================
-try:
-    from agents import Runner, SQLiteSession
-    from ogcode import Ultimate_Prompt_Refiner
-    from image_agents import PortraitPrompt_Enhancer
-    from my_supabase.supaabse import store_in_supabase
-    AGENT_IMPORTED = True
-except Exception as e:
-    AGENT_IMPORTED = False
-    print(f"⚠️ Import fallback mode: {e}")
-
-    # Mock fallback for SQLiteSession
-    class SQLiteSession:
-        def __init__(self, user_id):
-            self.user_id = user_id
-
-    # Mock fallback for Runner
-    class Runner:
-        @staticmethod
-        async def run(session, input_text):
-            class MockOutput:
-                final_output = f"Enhanced (mock): {input_text}"
-            return MockOutput()
-
-    # Mock fallback for store_in_supabase
-    def store_in_supabase(user_id, prompt, improved_prompt):
-        print(f"🪶 Mock Supabase store for {user_id}: {improved_prompt[:40]}...")
-
-    # Mock fallback for agents
-    class Ultimate_Prompt_Refiner:
-        pass
-
-    class PortraitPrompt_Enhancer:
-        pass
+from agents import Runner, SQLiteSession
+from ogcode import Ultimate_Prompt_Refiner
+from image_agents import PortraitPrompt_Enhancer
+from my_supabase.supaabse import store_in_supabase
 
 # =========================================================
 # 🧾 Logging Setup
@@ -136,7 +107,7 @@ async def root():
 
 
 # =========================================================
-# 🧠 Text Prompt Enhancer
+# 🧠 Text Prompt Enhancer (real agent)
 # =========================================================
 @app.post("/enhance-text", response_model=PromptResponse)
 async def enhance_text(request: PromptRequest):
@@ -145,11 +116,11 @@ async def enhance_text(request: PromptRequest):
 
     try:
         session = SQLiteSession(request.user_id)
-        # ✅ Corrected: Only 2 arguments
-        runner = await Runner.run(session, request.prompt)
+
+        # ✅ Real Agent Usage
+        runner = await Runner.run(Ultimate_Prompt_Refiner, session, request.prompt)
         improved_prompt = runner.final_output.strip()
 
-        # Store in Supabase (non-blocking)
         try:
             store_in_supabase(request.user_id, request.prompt, improved_prompt)
         except Exception as e:
@@ -164,7 +135,7 @@ async def enhance_text(request: PromptRequest):
 
 
 # =========================================================
-# 🎨 Image Prompt Enhancer
+# 🎨 Image Prompt Enhancer (real agent)
 # =========================================================
 @app.post("/enhance-image", response_model=PromptResponse)
 async def enhance_image(request: PromptRequest):
@@ -173,11 +144,11 @@ async def enhance_image(request: PromptRequest):
 
     try:
         session = SQLiteSession(request.user_id)
-        # ✅ Corrected: Only 2 arguments
-        runner = await Runner.run(session, request.prompt)
+
+        # ✅ Real Image Agent Usage
+        runner = await Runner.run(PortraitPrompt_Enhancer, session, request.prompt)
         improved_prompt = runner.final_output.strip()
 
-        # Store in Supabase (non-blocking)
         try:
             store_in_supabase(request.user_id, request.prompt, improved_prompt)
         except Exception as e:

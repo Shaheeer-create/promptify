@@ -155,51 +155,30 @@ No Markdown, greetings, or code fences.
 
 
 
-
 # =========================================================
-# FASTAPI ENDPOINT
+# COMMON FUNCTION (to avoid repetition)
 # =========================================================
-from pathlib import Path
-import os
-
-@app.post("/api/improve", response_model=AgentOutput)
-async def improve_prompt(request: PromptRequest):
+async def run_prompt_refiner(agent: Agent, request: PromptRequest):
+    """Helper function to process prompt with given agent."""
     try:
-        # =========================================================
-        # ✅ Use temporary writable directory for serverless environments
-        # =========================================================
         TMP_DIR = Path("/tmp/promptify_db")
         TMP_DIR.mkdir(parents=True, exist_ok=True)
         db_path = TMP_DIR / f"{request.user_id}_promptify.db"
 
         session = SQLiteSession(request.user_id, str(db_path))
+        combined_input = f"User prompt: {request.user_input}"
 
-        # =========================================================
-        # Prepare user input for processing
-        # =========================================================
-        combined_input = (
-            f"User prompt: {request.user_input}\n"
-            "Ask for context and preferred style, then refine using the appropriate short or detailed agent."
-        )
-
-        # =========================================================
-        # Run the Ultimate Prompt Refiner agent
-        # =========================================================
-        result = Runner.run_streamed(Ultimate_Prompt_Refiner, input=combined_input, session=session)
-
+        result = Runner.run_streamed(agent, input=combined_input, session=session)
         full_output = ""
+
         async for event in result.stream_events():
             if event.type == "raw_response_event" and isinstance(event.data, ResponseTextDeltaEvent):
                 full_output += event.data.delta
 
-        # =========================================================
-        # Store the interaction in Supabase
-        # =========================================================
+        # Store in Supabase
         store_in_supabase(request.user_id, request.user_input, full_output.strip())
 
-        # =========================================================
-        # Parse JSON if valid, else return raw text
-        # =========================================================
+        # Parse JSON output if valid
         try:
             parsed = json.loads(full_output.strip())
             return parsed
@@ -207,14 +186,25 @@ async def improve_prompt(request: PromptRequest):
             return {"improved_prompt": full_output.strip()}
 
     except Exception as e:
-        # Provide readable backend error message
         raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {str(e)}")
 
 
+# =========================================================
+# ENDPOINTS
+# =========================================================
 
-# =========================================================
-# ROOT ENDPOINT
-# =========================================================
+@app.post("/api/improve", response_model=AgentOutput)
+async def improve_short_prompt(request: PromptRequest):
+    """Refines prompt into short version."""
+    return await run_prompt_refiner(ShortPromptRefiner, request)
+
+
+@app.post("/api/improve-detailed", response_model=AgentOutput)
+async def improve_detailed_prompt(request: PromptRequest):
+    """Refines prompt into detailed version."""
+    return await run_prompt_refiner(DetailedPromptRefiner, request)
+
+
 @app.get("/")
 def root():
-    return {"message": "Welcome to Promptify Ultimate API! Use POST /api/improve to refine prompts."}
+    return {"message": "Welcome to Promptify API! Use /api/improve for short or /api/improve-detailed for detailed prompts."}

@@ -180,6 +180,7 @@ Use these tools in sequence:
 6) Style_Genre_AS_tool
 7) Background_Environment_AS_tool
 8) Face_Preservation_AS_tool
+use all the tools and proved fully improved prompt and avoid repetition. and also provide prompt very detailed to generate high quality image.
 Do NOT answer the prompt.
 Return the refined prompt strictly as plain text in English.
 """,

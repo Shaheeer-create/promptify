@@ -84,6 +84,9 @@ Take any user input and refine it to be clear, concise, professional, and action
 Do NOT answer the question — only improve the prompt.
 Use the PromptImprover agent as a handoff for clarity, context, and formatting.
 Return ONLY the refined prompt as plain text in English — no JSON, markdown, or examples.
+Do NOT add lists, examples, or symbols.
+Return ONLY the final refined prompt as a single continuous paragraph of plain English text.
+Do NOT include any newline characters, markdown, or JSON escape formatting.
 """,
     model=model,
     handoffs=[PromptImprover],

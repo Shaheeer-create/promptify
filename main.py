@@ -42,10 +42,10 @@ async def refine_general(data: PromptRequest):
 
         # ✅ Parse output safely
         try:
-            parsed = json.loads(result.strip())
+            parsed = json.loads(result.final_output)
             return parsed
         except json.JSONDecodeError:
-            return {"refined_prompt": result.strip()}
+            return {"refined_prompt": result.final_output.strip()}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {str(e)}")

@@ -5,6 +5,7 @@ from pydantic import BaseModel
 import asyncio, json
 from agents import Runner, SQLiteSession, set_tracing_disabled
 from ogcode import Ultimate_Prompt_Refiner
+from image_agents import PortraitPrompt_Enhancer
 
 app = FastAPI(title="Prompt Refinement API", version="1.0.0")
 
@@ -49,6 +50,34 @@ async def refine_general(data: PromptRequest):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {str(e)}")
+    
+@app.post("/refine-image-prompt")
+async def refine_general(data: PromptRequest):
+    try:
+        # ✅ Use /tmp to avoid Vercel read-only file system errors
+        TMP_DIR = Path("/tmp/promptify_db")
+        TMP_DIR.mkdir(parents=True, exist_ok=True)
+        db_path = TMP_DIR / f"{data.user_id}_promptify.db"
+        session = SQLiteSession(data.user_id, str(db_path))
+
+        # ✅ Use thread-safe async wrapper
+        result = await Runner.run(
+                    starting_agent=PortraitPrompt_Enhancer,
+                    session=session,
+                    input=data.prompt,
+                )
+            
+
+        # ✅ Parse output safely
+        try:
+            parsed = json.loads(result.final_output)
+            return parsed
+        except json.JSONDecodeError:
+            return {"refined_prompt": result.final_output.strip()}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {str(e)}")
+
 
 
 @app.get("/")

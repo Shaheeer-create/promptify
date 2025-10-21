@@ -1,7 +1,5 @@
-import asyncio
-from agents import Agent, Runner, SQLiteSession, set_tracing_disabled
+from agents import Agent,set_tracing_disabled
 from my_configuration.configuration import model
-from my_supabase.supaabse import store_in_supabase
 
 
 # Disable tracing for clean execution
@@ -191,24 +189,3 @@ PortraitPrompt_Enhancer = Agent(
     ]
 )
 
-session = SQLiteSession(USER_ID)
-while True:
-    user_input = input("Enter a prompt to improve (or 'exit' to quit): ")
-    if user_input.lower() == 'exit':
-        break
-
-    runner = Runner.run_sync(
-        starting_agent=PortraitPrompt_Enhancer,
-        session=session,
-        input=user_input
-    )
-
-    improved_prompt = runner.final_output.strip()
-    print("Improved Prompt:", improved_prompt)
-
-    # ✅ Store conversation in Supabase
-    try:
-        store_in_supabase(USER_ID, user_input, improved_prompt)
-        print("✅ Stored successfully in Supabase.\n")
-    except Exception as e:
-        print("⚠️ Failed to store in Supabase:", e, "\n")

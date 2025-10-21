@@ -1,8 +1,6 @@
 from pydantic import BaseModel
-from agents import Agent, Runner, SQLiteSession, set_tracing_disabled
+from agents import Agent, set_tracing_disabled
 from my_configuration.configuration import model
-from my_supabase.supaabse import store_in_supabase
-from openai.types.responses import ResponseTextDeltaEvent
 from agents.extensions.handoff_prompt import RECOMMENDED_PROMPT_PREFIX
 
 # ---------- Schema ----------
@@ -12,7 +10,6 @@ class Improved_Prompt(BaseModel):
 
 # ---------- Setup ----------
 set_tracing_disabled(True)
-USER_ID = "user123"  # Replace with actual logged-in user's ID
 
 
 # ---------- Agents ----------
@@ -91,26 +88,3 @@ Return ONLY the refined prompt as plain text in English — no JSON, markdown, o
     model=model,
     handoffs=[PromptImprover],
 )
-
-# ---------- Runner ----------
-session = SQLiteSession(USER_ID)
-while True:
-    user_input = input("Enter a prompt to improve (or 'exit' to quit): ")
-    if user_input.lower() == 'exit':
-        break
-
-    runner = Runner.run_sync(
-        starting_agent=Ultimate_Prompt_Refiner,
-        session=session,
-        input=user_input
-    )
-
-    improved_prompt = runner.final_output.strip()
-    print("Improved Prompt:", improved_prompt)
-
-    # ✅ Store conversation in Supabase
-    try:
-        store_in_supabase(USER_ID, user_input, improved_prompt)
-        print("✅ Stored successfully in Supabase.\n")
-    except Exception as e:
-        print("⚠️ Failed to store in Supabase:", e, "\n")

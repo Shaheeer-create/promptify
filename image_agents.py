@@ -197,7 +197,7 @@ model=model,
     Face_Preservation_AS_tool
    ]
 )
-
+Final_Assembler_AS_tool = Final_Assembler.as_tool(tool_name="final_assembler_tool", tool_description="Assembles the final refined prompt.")
 # =========================================================
 
 # 🎯 Master Handoff Agent (Portrait Prompt Enhancer)
@@ -206,17 +206,36 @@ model=model,
 
 PortraitPrompt_Enhancer = Agent(
 name="Portrait Prompt Enhancer",
-instructions="""
-Take any user input and refine it to be clear, concise, professional, and actionable.
-Do NOT answer the question — only improve the prompt.
-Use the Final_Assembler agent as a handoff for clarity, context, and formatting.
-the refined prompt should be very detailed and long provide each specification and very good prompt to generate high quality image.
-always handoff to Final_Assembler agent
-Return ONLY the refined prompt as plain text in English — no JSON, markdown, or examples dont use(**,\n).
-Return the refined prompt strictly as plain text in English.
+instructions=f"""{RECOMMENDED_PROMPT_PREFIX}
+You are the master coordinator for refining portrait prompts.
+Your job is to take any raw or unclear portrait description and refine it step-by-step through the full enhancement pipeline.
+Do NOT interpret or answer the content — only enhance the prompt quality.
 
-   """,
-   model=model,
-   handoffs=[Final_Assembler]
+Follow this refinement flow exactly, handing off each step to the next agent in order:
 
-   )
+1. Subject & Composition Expert — refine subject and pose.
+2. Lighting & Mood Specialist — enhance atmosphere and light realism.
+3. Camera & Lens Expert — add authentic photographic details.
+4. Aesthetic & Style Enhancer — enrich tone and artistic feel.
+5. Technical Quality Enhancer — improve clarity and resolution cues.
+6. Style & Genre Specialist — align genre and presentation.
+7. Background & Environment Specialist — set subtle contextual environment.
+8. Face Preservation Specialist — ensure facial integrity and realism.
+9. Final Prompt Assembler — merge all refinements into a cohesive, high-quality final prompt.
+
+The refined prompt must be vivid, cinematic, and natural-sounding — ready for professional AI image generation.
+Return ONLY one continuous paragraph of plain English text with no markdown, JSON, newlines, or escape characters.
+""",
+model=model,
+handoffs=[
+Subject_Composition_AS_tool,
+Lighting_Mood_AS_tool,
+Camera_Lens_AS_tool,
+Aesthetic_Style_AS_tool,
+Technical_Quality_AS_tool,
+Style_Genre_AS_tool,
+Background_Environment_AS_tool,
+Face_Preservation_AS_tool,
+Final_Assembler_AS_tool
+]
+)

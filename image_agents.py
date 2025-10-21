@@ -212,7 +212,7 @@ Do NOT answer the question — only improve the prompt.
 Use the Final_Assembler agent as a handoff for clarity, context, and formatting.
 the refined prompt should be very detailed and long provide each specification and very good prompt to generate high quality image.
 always handoff to Final_Assembler agent
-Return ONLY the refined prompt as plain text in English — no JSON, markdown, or examples dont use(**,/n).
+Return ONLY the refined prompt as plain text in English — no JSON, markdown, or examples dont use(**,\n).
 Return the refined prompt strictly as plain text in English.
 
    """,

@@ -1,6 +1,8 @@
-fastapi
-uvicorn
+fastapi[standard]>=0.119.0
+uvicorn[standard]>=0.24.0
+openai-agents>=0.4.0
+openai>=1.45.0
+python-decouple>=3.8
+python-dotenv>=1.1.1
+supabase>=2.22.0
 httpx
-openai
-python-dotenv
-python-decouple

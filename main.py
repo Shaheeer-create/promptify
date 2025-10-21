@@ -1,17 +1,13 @@
+from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+import asyncio, json
 from agents import Runner, SQLiteSession, set_tracing_disabled
 from ogcode import Ultimate_Prompt_Refiner
 
-# Initialize FastAPI app
-app = FastAPI(
-    title="Prompt Refinement API",
-    description="API for refining and enhancing prompts using specialized AI agents",
-    version="1.0.0",
-)
+app = FastAPI(title="Prompt Refinement API", version="1.0.0")
 
-# Enable CORS for all origins (you can restrict this later)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -20,38 +16,44 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Disable tracing for production cleanliness
 set_tracing_disabled(True)
 
-# ------------------------------
-# MODELS
-# ------------------------------
 class PromptRequest(BaseModel):
     user_id: str
     prompt: str
 
 
-# ------------------------------
-# ENDPOINTS
-# ------------------------------
 @app.post("/refine-general")
 async def refine_general(data: PromptRequest):
-    """
-    Refine general prompts using the Ultimate_Prompt_Refiner.
-    """
     try:
-        # Initialize SQLite session
-        session = SQLiteSession("user_123", "conversations.db")
+        # ✅ Use /tmp to avoid Vercel read-only file system errors
+        TMP_DIR = Path("/tmp/promptify_db")
+        TMP_DIR.mkdir(parents=True, exist_ok=True)
+        db_path = TMP_DIR / f"{data.user_id}_promptify.db"
+        session = SQLiteSession(data.user_id, str(db_path))
 
-        # Run the agent
-        result = await Runner.run(
-            starting_agent=Ultimate_Prompt_Refiner,
-            session=session,
-            input=data.prompt,
+        # ✅ Use thread-safe async wrapper
+        result = await asyncio.to_thread(
+            lambda: asyncio.run(
+                Runner.run(
+                    starting_agent=Ultimate_Prompt_Refiner,
+                    session=session,
+                    input=data.prompt,
+                )
+            )
         )
 
-        # Return the refined prompt
-        return {"refined_prompt": result}
+        # ✅ Parse output safely
+        try:
+            parsed = json.loads(result.strip())
+            return parsed
+        except json.JSONDecodeError:
+            return {"refined_prompt": result.strip()}
+
     except Exception as e:
-        # Log the error and return a 500 response
-        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {str(e)}")
+
+
+@app.get("/")
+def root():
+    return {"message": "Promptify Refine API active"}

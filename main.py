@@ -33,15 +33,12 @@ async def refine_general(data: PromptRequest):
         session = SQLiteSession(data.user_id, str(db_path))
 
         # ✅ Use thread-safe async wrapper
-        result = await asyncio.to_thread(
-            lambda: asyncio.run(
-                Runner.run(
+        result = await Runner.run(
                     starting_agent=Ultimate_Prompt_Refiner,
                     session=session,
                     input=data.prompt,
                 )
-            )
-        )
+            
 
         # ✅ Parse output safely
         try:

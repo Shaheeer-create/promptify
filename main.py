@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+import asyncio
 from agents import Runner, SQLiteSession, set_tracing_disabled
 from ogcode import Ultimate_Prompt_Refiner
 
@@ -32,6 +33,14 @@ class PromptRequest(BaseModel):
 
 
 # ------------------------------
+# HEALTH CHECK ROUTE
+# ------------------------------
+@app.get("/")
+async def health():
+    return {"status": "OK", "message": "Server running successfully on Vercel"}
+
+
+# ------------------------------
 # ENDPOINTS
 # ------------------------------
 @app.post("/refine-general")
@@ -40,18 +49,21 @@ async def refine_general(data: PromptRequest):
     Refine general prompts using the Ultimate_Prompt_Refiner.
     """
     try:
-        # Initialize SQLite session
-        session = SQLiteSession(data.user_id)
+        # ⚠️ Use in-memory DB (Vercel filesystem is read-only)
+        session = SQLiteSession(":memory:")
 
-        # Run the agent
-        result = await Runner.run(
-            starting_agent=Ultimate_Prompt_Refiner,
-            session=session,
-            input=data.prompt,
+        # Run the agent in a separate thread to avoid event loop issues
+        result = await asyncio.to_thread(
+            lambda: asyncio.run(
+                Runner.run(
+                    starting_agent=Ultimate_Prompt_Refiner,
+                    session=session,
+                    input=data.prompt,
+                )
+            )
         )
 
         # Return the refined prompt
         return {"refined_prompt": result}
     except Exception as e:
-        # Log the error and return a 500 response
         raise HTTPException(status_code=500, detail=f"Error: {str(e)}")

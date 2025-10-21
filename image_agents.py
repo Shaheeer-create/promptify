@@ -210,7 +210,7 @@ instructions="""
 Take any user input and refine it to be clear, concise, professional, and actionable.
 Do NOT answer the question — only improve the prompt.
 Use the Final_Assembler agent as a handoff for clarity, context, and formatting.
-the refined prompt should be very detailed and long provide each specification and very good prompt to generate high quality image.
+the refined prompt should be not too much detailed used only 80 to 100 words so it my qouta cant end and long provide each specification and very good prompt to generate high quality image.don
 always handoff to Final_Assembler agent
 Return ONLY the refined prompt as plain text in English — no JSON, markdown, or examples dont use(**,n).
 Return the refined prompt strictly as plain text in English.

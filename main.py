@@ -4,8 +4,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import asyncio, json
 from agents import Runner, SQLiteSession, set_tracing_disabled
-from ogcode import Ultimate_Prompt_Refiner
-from image_agents import PortraitPrompt_Enhancer
+from ogcode import Standard_Prompt_Engineer
+from image_agents import ExpertImagePromptAgents
 
 app = FastAPI(title="Prompt Refinement API", version="1.0.0")
 
@@ -35,7 +35,7 @@ async def refine_general(data: PromptRequest):
 
         # ✅ Use thread-safe async wrapper
         result = await Runner.run(
-                    starting_agent=Ultimate_Prompt_Refiner,
+                    starting_agent=Standard_Prompt_Engineer,
                     session=session,
                     input=data.prompt,
                 )
@@ -62,7 +62,7 @@ async def refine_general(data: PromptRequest):
 
         # ✅ Use thread-safe async wrapper
         result = await Runner.run(
-                    starting_agent=PortraitPrompt_Enhancer,
+                    starting_agent=ExpertImagePromptAgents,
                     session=session,
                     input=data.prompt,
                 )
